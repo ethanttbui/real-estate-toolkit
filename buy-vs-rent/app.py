@@ -72,6 +72,28 @@ annual_insurance = st.sidebar.number_input(
     help="火災・地震保険. Typically 2-5万円/year."
 )
 
+# Tax benefits
+st.sidebar.subheader("🏦 Tax Benefits (住宅ローン控除)")
+loan_deduction_rate = st.sidebar.number_input(
+    "Loan deduction rate (%)", value=0.7, step=0.1, format="%.1f",
+    help="住宅ローン控除: tax credit as % of year-end loan balance. "
+         "0.7% since 2022 reform (was 1.0% before)."
+)
+loan_deduction_years = st.sidebar.number_input(
+    "Deduction period (years)", value=13, step=1, min_value=0, max_value=13,
+    help="13 years for new properties, 10 years for used (中古). Set 0 to disable."
+)
+loan_deduction_balance_cap = st.sidebar.number_input(
+    "Loan balance cap for deduction (万円)", value=3000, step=500,
+    help="Upper limit on eligible loan balance. New general: 3000万円, "
+         "ZEH/低炭素: 3500-5000万円. Used: 2000万円."
+)
+annual_income_tax_cap = st.sidebar.number_input(
+    "Annual income tax + resident tax cap (万円)", value=40.0, step=5.0, format="%.0f",
+    help="Your actual annual tax liability (所得税+住民税) that the deduction can offset. "
+         "The deduction cannot exceed your tax bill."
+)
+
 # Depreciation & appreciation
 st.sidebar.subheader("📉 Property Value Changes")
 annual_appreciation_pct = st.sidebar.number_input(
@@ -212,9 +234,16 @@ for yr in range(1, years + 1):
     # Insurance
     ins = annual_insurance
 
+    # Housing loan tax deduction (住宅ローン控除)
+    tax_deduction = 0.0
+    if yr <= loan_deduction_years:
+        eligible_balance = min(max(remaining_loan, 0), loan_deduction_balance_cap)
+        raw_deduction = eligible_balance * loan_deduction_rate / 100.0
+        tax_deduction = min(raw_deduction, annual_income_tax_cap)
+
     # Total annual buy cost (cash outflows excluding principal, which builds equity)
     annual_cost = interest_paid + prop_tax + annual_maintenance + annual_repair + ins
-    total_cash_out = principal_paid + annual_cost  # total cash leaving your pocket
+    total_cash_out = principal_paid + annual_cost - tax_deduction  # net after tax credit
     cumulative_buy_cost += total_cash_out
 
     # Property value change
@@ -228,6 +257,7 @@ for yr in range(1, years + 1):
         "Maintenance": round(annual_maintenance, 1),
         "Repair Reserve": round(annual_repair, 1),
         "Insurance": round(ins, 1),
+        "Tax Deduction": round(tax_deduction, 1),
         "Annual Cash Out": round(total_cash_out, 1),
         "Cumulative Cash Out": round(cumulative_buy_cost, 1),
         "Remaining Loan": round(max(remaining_loan, 0), 1),
@@ -408,7 +438,9 @@ with left:
     st.write(f"**Loan amount:** ¥{loan_amount:,.0f}万")
     st.write(f"**Monthly mortgage:** ¥{monthly_mortgage:,.2f}万")
     st.write(f"**Closing costs:** ¥{closing_costs:,.0f}万")
-    st.write(f"**Total cash out ({years}yr):** ¥{cumulative_buy_cost:,.0f}万")
+    total_tax_saved = sum(r["Tax Deduction"] for r in buy_yearly)
+    st.write(f"**住宅ローン控除 total:** ¥{total_tax_saved:,.0f}万 (over {min(loan_deduction_years, years)}yr)")
+    st.write(f"**Total cash out ({years}yr):** ¥{cumulative_buy_cost:,.0f}万 (net of tax deduction)")
 
     st.markdown("#### Exit Strategy")
     if exit_strategy == "Sell the property":
@@ -450,41 +482,3 @@ with st.expander("📋 Buy – Year-by-Year Breakdown"):
 with st.expander("📋 Rent – Year-by-Year Breakdown"):
     rent_df = pd.DataFrame(rent_yearly)
     st.dataframe(rent_df, width='stretch', hide_index=True)
-
-# --- Cost breakdown pie charts ---
-st.subheader("🥧 Cost Breakdown")
-pie_left, pie_right = st.columns(2)
-
-with pie_left:
-    st.markdown("**Buy – Total Cost Components**")
-    total_interest = sum(r["Mortgage (Interest)"] for r in buy_yearly)
-    total_principal = sum(r["Mortgage (Principal)"] for r in buy_yearly)
-    total_ptax = sum(r["Property Tax"] for r in buy_yearly)
-    total_maint = sum(r["Maintenance"] for r in buy_yearly)
-    total_repair = sum(r["Repair Reserve"] for r in buy_yearly)
-    total_ins = sum(r["Insurance"] for r in buy_yearly)
-
-    buy_breakdown = pd.DataFrame({
-        "Category": ["Down Payment", "Closing Costs", "Interest", "Principal",
-                      "Property Tax", "Maintenance", "Repair Reserve", "Insurance"],
-        "Amount (万円)": [down_payment, closing_costs, total_interest, total_principal,
-                          total_ptax, total_maint, total_repair, total_ins],
-    })
-    st.dataframe(buy_breakdown, width='stretch', hide_index=True)
-
-with pie_right:
-    st.markdown("**Rent – Total Cost Components**")
-    total_rent_paid = sum(r["Annual Rent"] for r in rent_yearly)
-    total_renewal = sum(r["Renewal Fee"] for r in rent_yearly)
-    total_rent_ins = sum(r["Insurance"] for r in rent_yearly)
-
-    rent_breakdown = pd.DataFrame({
-        "Category": ["Initial Fees", "Rent", "Renewal Fees", "Insurance", "Deposit Return"],
-        "Amount (万円)": [initial_rent_fees, total_rent_paid, total_renewal,
-                          total_rent_ins, -deposit_return],
-    })
-    st.dataframe(rent_breakdown, width='stretch', hide_index=True)
-
-st.markdown("---")
-st.caption("Note: All amounts in 万円 (10,000 yen). This tool is for estimation purposes only. "
-           "Consult a qualified professional for actual financial decisions.")
