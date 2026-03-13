@@ -89,7 +89,7 @@ loan_deduction_balance_cap = st.sidebar.number_input(
          "ZEH/低炭素: 3500-5000万円. Used: 2000万円."
 )
 annual_income_tax_cap = st.sidebar.number_input(
-    "Annual income tax + resident tax cap (万円)", value=40.0, step=5.0, format="%.0f",
+    "Annual income tax + resident tax cap (万円)", value=40.0, step=5.0, format="%.1f",
     help="Your actual annual tax liability (所得税+住民税) that the deduction can offset. "
          "The deduction cannot exceed your tax bill."
 )
@@ -155,7 +155,7 @@ shikikin_months = st.sidebar.number_input(
     help="Security deposit, partially refundable."
 )
 shikikin_return_pct = st.sidebar.number_input(
-    "Deposit return (%)", value=50.0, step=10.0, format="%.0f",
+    "Deposit return (%)", value=50.0, step=10.0, format="%.1f",
     help="Percentage of shikikin returned when moving out."
 )
 agency_fee_months = st.sidebar.number_input(
@@ -376,6 +376,7 @@ for yr in range(1, years + 1):
         "Renewal Fee": round(renewal_cost, 1),
         "Insurance": round(ins, 1),
         "Annual Total": round(annual_total, 1),
+        "Deposit Return": 0.0,
         "Cumulative Cost": round(cumulative_rent_cost, 1),
     })
 
@@ -384,6 +385,10 @@ for yr in range(1, years + 1):
 # Deposit return at end
 deposit_return = shikikin_months * monthly_rent * shikikin_return_pct / 100.0
 cumulative_rent_cost -= deposit_return
+if rent_yearly:
+    rent_yearly[-1]["Deposit Return"] = round(-deposit_return, 1)
+    rent_yearly[-1]["Annual Total"] = round(rent_yearly[-1]["Annual Total"] - deposit_return, 1)
+    rent_yearly[-1]["Cumulative Cost"] = round(cumulative_rent_cost, 1)
 
 # --- Opportunity cost of buying capital ---
 # The renter can invest down_payment + closing_costs instead
@@ -392,6 +397,9 @@ investable_capital = down_payment + closing_costs
 # Year-by-year: renter invests the difference in monthly cost
 # Compare monthly cash outflows
 investment_portfolio = investable_capital
+total_principal_invested = investable_capital
+investment_portfolio_yearly = []
+principal_invested_yearly = []
 for yr in range(1, years + 1):
     buy_annual_cash = buy_yearly[yr - 1]["Annual Cash Out"]
     rent_annual_cash = rent_yearly[yr - 1]["Annual Total"]
@@ -402,13 +410,14 @@ for yr in range(1, years + 1):
         investment_portfolio *= (1 + investment_return_pct / 100.0 / 12.0)
         if monthly_saving > 0:
             investment_portfolio += monthly_saving
+            total_principal_invested += monthly_saving
+
+    investment_portfolio_yearly.append(investment_portfolio)
+    principal_invested_yearly.append(total_principal_invested)
 
 rent_total_cost = cumulative_rent_cost
-# The renter's net position: cost minus investment gains
-renter_investment_gain = investment_portfolio - investable_capital - sum(
-    max(buy_yearly[yr - 1]["Annual Cash Out"] - rent_yearly[yr - 1]["Annual Total"], 0)
-    for yr in range(1, years + 1)
-)
+# The renter's net position: cost minus investment gains (not entire portfolio)
+renter_investment_gain = investment_portfolio - total_principal_invested
 rent_net_cost = rent_total_cost - renter_investment_gain
 
 # ---------------------------------------------------------------------------
@@ -418,13 +427,13 @@ st.markdown("---")
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    st.metric("Buy – Net Cost", f"¥{buy_net_cost:,.0f}万")
+    st.metric("Buy – Net Cost", f"¥{buy_net_cost:,.1f}万")
 with col2:
-    st.metric("Rent – Net Cost", f"¥{rent_net_cost:,.0f}万")
+    st.metric("Rent – Net Cost", f"¥{rent_net_cost:,.1f}万")
 with col3:
     diff = buy_net_cost - rent_net_cost
     label = "Buy cheaper by" if diff < 0 else "Rent cheaper by"
-    st.metric(label, f"¥{abs(diff):,.0f}万")
+    st.metric(label, f"¥{abs(diff):,.1f}万")
 
 st.markdown("---")
 
@@ -434,42 +443,53 @@ left, right = st.columns(2)
 with left:
     st.subheader("🏠 Buy Summary")
     st.write(f"**Property price:** ¥{property_price:,}万")
-    st.write(f"**Down payment:** ¥{down_payment:,.0f}万 ({down_payment_pct}%)")
-    st.write(f"**Loan amount:** ¥{loan_amount:,.0f}万")
+    st.write(f"**Down payment:** ¥{down_payment:,.1f}万 ({down_payment_pct}%)")
+    st.write(f"**Loan amount:** ¥{loan_amount:,.1f}万")
     st.write(f"**Monthly mortgage:** ¥{monthly_mortgage:,.2f}万")
-    st.write(f"**Closing costs:** ¥{closing_costs:,.0f}万")
+    st.write(f"**Closing costs:** ¥{closing_costs:,.1f}万")
     total_tax_saved = sum(r["Tax Deduction"] for r in buy_yearly)
-    st.write(f"**住宅ローン控除 total:** ¥{total_tax_saved:,.0f}万 (over {min(loan_deduction_years, years)}yr)")
-    st.write(f"**Total cash out ({years}yr):** ¥{cumulative_buy_cost:,.0f}万 (net of tax deduction)")
+    st.write(f"**住宅ローン控除 total:** ¥{total_tax_saved:,.1f}万 (over {min(loan_deduction_years, years)}yr)")
+    st.write(f"**Total cash out ({years}yr):** ¥{cumulative_buy_cost:,.1f}万 (net of tax deduction)")
 
     st.markdown("#### Exit Strategy")
     if exit_strategy == "Sell the property":
         for k, v in exit_summary.items():
             st.write(f"**{k}:** ¥{v:,}万")
-        st.write(f"**Net cost of buying** (cash out − sale proceeds): **¥{buy_net_cost:,.0f}万**")
+        st.write(f"**Net cost of buying** (cash out − sale proceeds): **¥{buy_net_cost:,.1f}万**")
     else:
         for k, v in exit_summary.items():
             st.write(f"**{k}:** ¥{v:,}万")
-        st.write(f"**Net cost of buying** (cash out − rental NPV): **¥{buy_net_cost:,.0f}万**")
+        st.write(f"**Net cost of buying** (cash out − rental NPV): **¥{buy_net_cost:,.1f}万**")
 
 with right:
     st.subheader("🏢 Rent Summary")
     st.write(f"**Monthly rent (initial):** ¥{monthly_rent:,}万")
-    st.write(f"**Initial fees:** ¥{initial_rent_fees:,.0f}万 "
+    st.write(f"**Initial fees:** ¥{initial_rent_fees:,.1f}万 "
              f"(Reikin {reikin_months}mo + Deposit {shikikin_months}mo + Agency {agency_fee_months}mo)")
     st.write(f"**Deposit return:** ¥{deposit_return:,.1f}万")
-    st.write(f"**Total rent cost ({years}yr):** ¥{rent_total_cost:,.0f}万")
-    st.write(f"**Renter investment gain:** ¥{renter_investment_gain:,.0f}万")
-    st.write(f"**Net cost of renting** (cost − investment gain): **¥{rent_net_cost:,.0f}万**")
+    st.write(f"**Total rent cost ({years}yr):** ¥{rent_total_cost:,.1f}万")
+    st.write(f"**Renter investment gain:** ¥{renter_investment_gain:,.1f}万")
+    st.write(f"**Net cost of renting** (cost − investment gain): **¥{rent_net_cost:,.1f}万**")
 
 st.markdown("---")
 
 # --- Charts ---
-st.subheader("📊 Cumulative Cost Comparison")
+st.subheader("📊 Net Cost Comparison (Cost − Equity)")
+st.caption("Buy: cumulative cash out − property equity. Rent: cumulative cost − investment gains.")
+
+buy_net_by_year = [
+    row["Cumulative Cash Out"] - (row["Property Value"] - row["Remaining Loan"])
+    for row in buy_yearly
+]
+rent_net_by_year = [
+    rent_yearly[i]["Cumulative Cost"] - (investment_portfolio_yearly[i] - principal_invested_yearly[i])
+    for i in range(years)
+]
+
 chart_df = pd.DataFrame({
     "Year": [row["Year"] for row in buy_yearly],
-    "Buy (Cumulative Cash Out)": [row["Cumulative Cash Out"] for row in buy_yearly],
-    "Rent (Cumulative Cost)": [row["Cumulative Cost"] for row in rent_yearly],
+    "Buy (Cost − Equity)": buy_net_by_year,
+    "Rent (Cost − Investments)": rent_net_by_year,
 })
 chart_df = chart_df.set_index("Year")
 st.line_chart(chart_df, width='stretch')
