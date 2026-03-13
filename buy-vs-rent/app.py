@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import json
 
 st.set_page_config(page_title="Buy vs Rent (Japan)", layout="wide")
 st.title("🏠 Buy vs Rent 比較ツール (Japanese Market)")
@@ -11,85 +12,99 @@ st.caption("Compare the total cost of buying vs renting property in Japan over a
 # ---------------------------------------------------------------------------
 st.sidebar.header("🔧 Parameters")
 
+# --- Save / Load parameters ---
+st.sidebar.subheader("💾 Save / Load")
+_uploaded = st.sidebar.file_uploader("Import parameters (JSON)", type="json", key="_param_upload")
+if _uploaded:
+    _file_bytes = _uploaded.getvalue()
+    _file_hash = hash(_file_bytes)
+    if st.session_state.get("_loaded_hash") != _file_hash:
+        _loaded = json.loads(_file_bytes)
+        for _k, _v in _loaded.items():
+            st.session_state[_k] = _v
+        st.session_state["_loaded_hash"] = _file_hash
+        st.rerun()
+
 # --- Evaluation period ---
 st.sidebar.subheader("Evaluation Period")
-years = st.sidebar.slider("Evaluation period (years)", 1, 35, 10)
+years = st.sidebar.slider("Evaluation period (years)", 1, 35, 10, key="years")
 
 # --- Property / Purchase ---
 st.sidebar.subheader("🏗 Property & Purchase")
 property_price = st.sidebar.number_input(
-    "Property price (万円)", value=5000, step=100,
+    "Property price (万円)", value=5000, step=100, key="property_price",
     help="Purchase price in 万円 (10,000 yen units). 5000万円 ≈ 50M yen."
 )
 down_payment_pct = st.sidebar.slider(
-    "Down payment (%)", 0, 100, 20, help="Percentage of property price paid upfront."
+    "Down payment (%)", 0, 100, 20, key="down_payment_pct",
+    help="Percentage of property price paid upfront."
 )
 
 # Mortgage
 st.sidebar.subheader("💰 Mortgage")
 mortgage_rate = st.sidebar.number_input(
-    "Annual interest rate (%)", value=0.5, step=0.05, format="%.2f",
+    "Annual interest rate (%)", value=0.5, step=0.05, format="%.2f", key="mortgage_rate",
     help="Typical Japanese variable rate ~0.3-0.6%, fixed 10yr ~1.0-1.5%."
 )
-mortgage_term = st.sidebar.slider("Mortgage term (years)", 1, 35, 35)
+mortgage_term = st.sidebar.slider("Mortgage term (years)", 1, 35, 35, key="mortgage_term")
 
 # Taxes & closing costs
 st.sidebar.subheader("📋 Buying Costs & Taxes")
 
 closing_cost_pct = st.sidebar.number_input(
-    "Closing costs (% of price)", value=7.0, step=0.5, format="%.1f",
+    "Closing costs (% of price)", value=7.0, step=0.5, format="%.1f", key="closing_cost_pct",
     help="Includes 仲介手数料 (agent ~3%), 登録免許税 (registration), 不動産取得税, "
          "stamp duty, judicial scrivener, etc. Typically 6-8% for used, 3-5% new."
 )
 
 property_tax_rate = st.sidebar.number_input(
-    "Annual property tax (% of assessed value)", value=1.7, step=0.1, format="%.1f",
+    "Annual property tax (% of assessed value)", value=1.7, step=0.1, format="%.1f", key="property_tax_rate",
     help="固定資産税 (1.4%) + 都市計画税 (0.3%) = 1.7% of assessed value."
 )
 assessed_value_ratio = st.sidebar.number_input(
-    "Assessed / market value ratio", value=0.7, step=0.05, format="%.2f",
+    "Assessed / market value ratio", value=0.7, step=0.05, format="%.2f", key="assessed_value_ratio",
     help="固定資産税評価額 is typically 60-70% of market value."
 )
 
 # Maintenance
 st.sidebar.subheader("🔧 Maintenance (Buying)")
 monthly_maintenance = st.sidebar.number_input(
-    "Monthly management fee (万円)", value=1.5, step=0.1, format="%.1f",
+    "Monthly management fee (万円)", value=1.5, step=0.1, format="%.1f", key="monthly_maintenance",
     help="管理費 for mansions (condos). Typically 1-2万円/month."
 )
 monthly_repair_reserve = st.sidebar.number_input(
-    "Monthly repair reserve (万円)", value=1.0, step=0.1, format="%.1f",
+    "Monthly repair reserve (万円)", value=1.0, step=0.1, format="%.1f", key="monthly_repair_reserve",
     help="修繕積立金. Typically 0.5-1.5万円/month, increases over time."
 )
 repair_reserve_increase_pct = st.sidebar.number_input(
-    "Annual repair reserve increase (%)", value=3.0, step=0.5, format="%.1f",
+    "Annual repair reserve increase (%)", value=3.0, step=0.5, format="%.1f", key="repair_reserve_increase_pct",
     help="修繕積立金 often increases ~3-5% per year."
 )
 
 # Insurance
 annual_insurance = st.sidebar.number_input(
-    "Annual fire/earthquake insurance (万円)", value=3.0, step=0.5, format="%.1f",
+    "Annual fire/earthquake insurance (万円)", value=3.0, step=0.5, format="%.1f", key="annual_insurance",
     help="火災・地震保険. Typically 2-5万円/year."
 )
 
 # Tax benefits
 st.sidebar.subheader("🏦 Tax Benefits (住宅ローン控除)")
 loan_deduction_rate = st.sidebar.number_input(
-    "Loan deduction rate (%)", value=0.7, step=0.1, format="%.1f",
+    "Loan deduction rate (%)", value=0.7, step=0.1, format="%.1f", key="loan_deduction_rate",
     help="住宅ローン控除: tax credit as % of year-end loan balance. "
          "0.7% since 2022 reform (was 1.0% before)."
 )
 loan_deduction_years = st.sidebar.number_input(
-    "Deduction period (years)", value=13, step=1, min_value=0, max_value=13,
+    "Deduction period (years)", value=13, step=1, min_value=0, max_value=13, key="loan_deduction_years",
     help="13 years for new properties, 10 years for used (中古). Set 0 to disable."
 )
 loan_deduction_balance_cap = st.sidebar.number_input(
-    "Loan balance cap for deduction (万円)", value=3000, step=500,
+    "Loan balance cap for deduction (万円)", value=3000, step=500, key="loan_deduction_balance_cap",
     help="Upper limit on eligible loan balance. New general: 3000万円, "
          "ZEH/低炭素: 3500-5000万円. Used: 2000万円."
 )
 annual_income_tax_cap = st.sidebar.number_input(
-    "Annual income tax + resident tax cap (万円)", value=40.0, step=5.0, format="%.1f",
+    "Annual income tax + resident tax cap (万円)", value=40.0, step=5.0, format="%.1f", key="annual_income_tax_cap",
     help="Your actual annual tax liability (所得税+住民税) that the deduction can offset. "
          "The deduction cannot exceed your tax bill."
 )
@@ -97,7 +112,7 @@ annual_income_tax_cap = st.sidebar.number_input(
 # Depreciation & appreciation
 st.sidebar.subheader("📉 Property Value Changes")
 annual_appreciation_pct = st.sidebar.number_input(
-    "Annual property appreciation (%)", value=-1.0, step=0.5, format="%.1f",
+    "Annual property appreciation (%)", value=-1.0, step=0.5, format="%.1f", key="annual_appreciation_pct",
     help="Japanese properties often depreciate. Wood structures: ~-2 to -4%/yr, "
          "RC mansions: ~0 to -2%/yr. Central Tokyo may appreciate."
 )
@@ -105,82 +120,129 @@ annual_appreciation_pct = st.sidebar.number_input(
 # Exit strategy
 st.sidebar.subheader("🚪 Exit Strategy (End of Period)")
 exit_strategy = st.sidebar.radio(
-    "At end of evaluation period:", ["Sell the property", "Rent it out"]
+    "At end of evaluation period:", ["Sell the property", "Rent it out"], key="exit_strategy"
 )
 
 if exit_strategy == "Sell the property":
     selling_cost_pct = st.sidebar.number_input(
-        "Selling costs (% of sale price)", value=4.0, step=0.5, format="%.1f",
+        "Selling costs (% of sale price)", value=4.0, step=0.5, format="%.1f", key="selling_cost_pct",
         help="仲介手数料 ~3% + misc ~1%."
     )
 else:
     rental_income_monthly = st.sidebar.number_input(
-        "Expected monthly rental income (万円)", value=15.0, step=1.0, format="%.1f",
+        "Expected monthly rental income (万円)", value=15.0, step=1.0, format="%.1f", key="rental_income_monthly",
         help="Gross monthly rent you could charge."
     )
     rental_vacancy_pct = st.sidebar.number_input(
-        "Vacancy rate (%)", value=5.0, step=1.0, format="%.1f"
+        "Vacancy rate (%)", value=5.0, step=1.0, format="%.1f", key="rental_vacancy_pct"
     )
     rental_mgmt_fee_pct = st.sidebar.number_input(
-        "Property management fee (%)", value=5.0, step=1.0, format="%.1f",
+        "Property management fee (%)", value=5.0, step=1.0, format="%.1f", key="rental_mgmt_fee_pct",
         help="管理委託料, typically 3-5% of rent."
     )
     rental_eval_years = st.sidebar.slider(
-        "Rental evaluation period (years)", 1, 30, 10,
+        "Rental evaluation period (years)", 1, 30, 10, key="rental_eval_years",
         help="How many years you plan to rent it out after the evaluation period."
     )
     rental_mortgage_rate = st.sidebar.number_input(
-        "Rental mortgage rate (%)", value=1.5, step=0.1, format="%.2f",
+        "Rental mortgage rate (%)", value=1.5, step=0.1, format="%.2f", key="rental_mortgage_rate",
         help="Investment property loans typically 1.5-3.0%."
     )
 
 # --- Renting ---
 st.sidebar.subheader("🏢 Renting")
 monthly_rent = st.sidebar.number_input(
-    "Monthly rent (万円)", value=15.0, step=1.0, format="%.1f",
+    "Monthly rent (万円)", value=15.0, step=1.0, format="%.1f", key="monthly_rent",
     help="Current monthly rent."
 )
 rent_inflation_pct = st.sidebar.number_input(
-    "Annual rent increase (%)", value=1.0, step=0.5, format="%.1f",
+    "Annual rent increase (%)", value=1.0, step=0.5, format="%.1f", key="rent_inflation_pct",
     help="Rent inflation. Japan is low: 0-2%/yr."
 )
 
 st.sidebar.subheader("📋 Renting Costs")
 reikin_months = st.sidebar.number_input(
-    "礼金 Reikin (months of rent)", value=1.0, step=0.5, format="%.1f",
+    "礼金 Reikin (months of rent)", value=1.0, step=0.5, format="%.1f", key="reikin_months",
     help="Gift money (non-refundable). Typically 0-2 months."
 )
 shikikin_months = st.sidebar.number_input(
-    "敷金 Shikikin / deposit (months)", value=1.0, step=0.5, format="%.1f",
+    "敷金 Shikikin / deposit (months)", value=1.0, step=0.5, format="%.1f", key="shikikin_months",
     help="Security deposit, partially refundable."
 )
 shikikin_return_pct = st.sidebar.number_input(
-    "Deposit return (%)", value=50.0, step=10.0, format="%.1f",
+    "Deposit return (%)", value=50.0, step=10.0, format="%.1f", key="shikikin_return_pct",
     help="Percentage of shikikin returned when moving out."
 )
 agency_fee_months = st.sidebar.number_input(
-    "Agency fee (months of rent)", value=1.0, step=0.5, format="%.1f",
+    "Agency fee (months of rent)", value=1.0, step=0.5, format="%.1f", key="agency_fee_months",
     help="仲介手数料. Typically 0.5-1 month."
 )
 renewal_fee_months = st.sidebar.number_input(
-    "Renewal fee (months of rent)", value=1.0, step=0.5, format="%.1f",
+    "Renewal fee (months of rent)", value=1.0, step=0.5, format="%.1f", key="renewal_fee_months",
     help="更新料. Typically 1 month every 2 years."
 )
 renewal_interval = st.sidebar.slider(
-    "Renewal interval (years)", 1, 5, 2,
+    "Renewal interval (years)", 1, 5, 2, key="renewal_interval",
     help="Lease renewal cycle. Standard is 2 years."
 )
 renter_insurance_annual = st.sidebar.number_input(
-    "Annual renter's insurance (万円)", value=0.5, step=0.1, format="%.1f",
+    "Annual renter's insurance (万円)", value=0.5, step=0.1, format="%.1f", key="renter_insurance_annual",
     help="火災保険 for renters. ~0.3-0.7万円/year."
 )
 
 # --- Investment return (opportunity cost) ---
 st.sidebar.subheader("📈 Opportunity Cost")
 investment_return_pct = st.sidebar.number_input(
-    "Annual investment return (%)", value=5.0, step=0.5, format="%.1f",
+    "Annual investment return (%)", value=5.0, step=0.5, format="%.1f", key="investment_return_pct",
     help="Return on alternative investments if you didn't buy. "
          "Used to compare the opportunity cost of the down payment & savings difference."
+)
+
+# --- Export parameters ---
+_all_params = {
+    "years": years,
+    "property_price": property_price,
+    "down_payment_pct": down_payment_pct,
+    "mortgage_rate": mortgage_rate,
+    "mortgage_term": mortgage_term,
+    "closing_cost_pct": closing_cost_pct,
+    "property_tax_rate": property_tax_rate,
+    "assessed_value_ratio": assessed_value_ratio,
+    "monthly_maintenance": monthly_maintenance,
+    "monthly_repair_reserve": monthly_repair_reserve,
+    "repair_reserve_increase_pct": repair_reserve_increase_pct,
+    "annual_insurance": annual_insurance,
+    "loan_deduction_rate": loan_deduction_rate,
+    "loan_deduction_years": loan_deduction_years,
+    "loan_deduction_balance_cap": loan_deduction_balance_cap,
+    "annual_income_tax_cap": annual_income_tax_cap,
+    "annual_appreciation_pct": annual_appreciation_pct,
+    "exit_strategy": exit_strategy,
+    "monthly_rent": monthly_rent,
+    "rent_inflation_pct": rent_inflation_pct,
+    "reikin_months": reikin_months,
+    "shikikin_months": shikikin_months,
+    "shikikin_return_pct": shikikin_return_pct,
+    "agency_fee_months": agency_fee_months,
+    "renewal_fee_months": renewal_fee_months,
+    "renewal_interval": renewal_interval,
+    "renter_insurance_annual": renter_insurance_annual,
+    "investment_return_pct": investment_return_pct,
+}
+if exit_strategy == "Sell the property":
+    _all_params["selling_cost_pct"] = selling_cost_pct
+else:
+    _all_params["rental_income_monthly"] = rental_income_monthly
+    _all_params["rental_vacancy_pct"] = rental_vacancy_pct
+    _all_params["rental_mgmt_fee_pct"] = rental_mgmt_fee_pct
+    _all_params["rental_eval_years"] = rental_eval_years
+    _all_params["rental_mortgage_rate"] = rental_mortgage_rate
+
+st.sidebar.download_button(
+    "💾 Export parameters",
+    json.dumps(_all_params, indent=2, ensure_ascii=False),
+    file_name="buy_vs_rent_params.json",
+    mime="application/json",
 )
 
 # ---------------------------------------------------------------------------
@@ -387,7 +449,6 @@ deposit_return = shikikin_months * monthly_rent * shikikin_return_pct / 100.0
 cumulative_rent_cost -= deposit_return
 if rent_yearly:
     rent_yearly[-1]["Deposit Return"] = round(-deposit_return, 1)
-    rent_yearly[-1]["Annual Total"] = round(rent_yearly[-1]["Annual Total"] - deposit_return, 1)
     rent_yearly[-1]["Cumulative Cost"] = round(cumulative_rent_cost, 1)
 
 # --- Opportunity cost of buying capital ---
